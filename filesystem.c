@@ -1,3 +1,4 @@
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,11 +59,21 @@ int fs_create(char* input_file, char* simul_file){
 
 	/* Write the code to load a new file to the simulated filesystem. */
 	printf("Creating '%s' at '%s'\n", input_file, simul_file);
-
+	
+	/* initiate base */
 	int i = 0;
 	struct sector_data sector;
 	struct root_table_directory root_dir;
 	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
+
+	/* set path */
+	char *file_name = basename(simul_file);
+	char *dir_name = dirname(simul_file);
+
+	printf("file_name: %s\n",file_name);
+	printf("dir_name: %s\n",dir_name);
+	printf("The path doesn't exist\n");
+	return 1;
 
 	/* open file */
 	FILE *fileptr;
@@ -79,30 +90,34 @@ int fs_create(char* input_file, char* simul_file){
 	memset(&sector, root_dir.free_sectors_list, sizeof(sector));
 	int sector_number = root_dir.free_sectors_list;
 
-	/* iterate the file */
+	/* write file at sectors */ 
+	int data_amount = 0;
+	while(1){
 
-
-	int run = 1;
-	int range = 0;
-	while(run){
-		ds_write_sector(i, (void*)&sector, SECTOR_SIZE);
-
-		if(ftell(fileptr) + 508 < filelen){
-			range = 508;
-			sector.next_sector = ++sector_number;
-		}else{
-			range = filelen - ftell(fileptr);
-			root_dir.free_sectors_list = sector_number + 1;
-			sector.next_sector = 0;
-			run = 0;
+		// have read all file
+		if( ftell(fileptr) == filelen ){
+			break;
 		}
 
-		fseek(fileptr, range, i*508);
 		sprintf(sector.data, "%d", fileptr);
 
-		printf("--\n");
-		printf("\n%d\n",sizeof(fileptr));
+		// have more than 508 bytes to read
+		if(ftell(fileptr) + 508 < filelen){
+			data_amount = 508;
+			sector.next_sector = sector_number + 1;
+		}
+		// have less than 508 bytes to read
+		else{
+			data_amount = filelen - ftell(fileptr);
+			sector.next_sector = 0;
+			root_dir.free_sectors_list = sector_number + 1;
+		}
 		
+		// move the file pointer for the data_amount available at this iteration
+		fseek(fileptr, data_amount, SEEK_CUR);
+		printf("data_amount: %d\n", data_amount);
+		printf("offset: %d\n", ftell(fileptr));
+		ds_write_sector(sector_number++, (void*)&sector, SECTOR_SIZE);					
 	}
 
 	fclose(fileptr);

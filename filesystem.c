@@ -57,6 +57,65 @@ int fs_create(char* input_file, char* simul_file){
 	}
 
 	/* Write the code to load a new file to the simulated filesystem. */
+	printf("Creating '%s' at '%s'\n", input_file, simul_file);
+
+	int i = 0;
+	struct sector_data sector;
+	struct root_table_directory root_dir;
+	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
+
+	/* open file */
+	FILE *fileptr;
+	char *buffer;
+	long filelen;
+
+	/* file info */
+	fileptr = fopen(input_file, "rb");
+	fseek(fileptr, 0, SEEK_END);
+	filelen = ftell(fileptr);
+	rewind(fileptr);
+
+	/* set sector to the first free */
+	memset(&sector, root_dir.free_sectors_list, sizeof(sector));
+	int sector_number = root_dir.free_sectors_list;
+
+	/* iterate the file */
+
+
+	int run = 1;
+	int range = 0;
+	while(run){
+		ds_write_sector(i, (void*)&sector, SECTOR_SIZE);
+
+		if(ftell(fileptr) + 508 < filelen){
+			range = 508;
+			sector.next_sector = ++sector_number;
+		}else{
+			range = filelen - ftell(fileptr);
+			root_dir.free_sectors_list = sector_number + 1;
+			sector.next_sector = 0;
+			run = 0;
+		}
+
+		fseek(fileptr, range, i*508);
+		sprintf(sector.data, "%d", fileptr);
+
+		printf("--\n");
+		printf("\n%d\n",sizeof(fileptr));
+		
+	}
+
+	fclose(fileptr);
+
+	// int i=0;
+	// for(i; i < 15; i++){
+	// 	printf("entry_length = %s\n", root_dir.entries[i].name);
+	// }
+
+	//int entry_length = sizeof(root_dir.entries) / sizeof(root_dir.entries[0]);
+	
+
+
 	
 	ds_stop();
 	

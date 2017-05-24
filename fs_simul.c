@@ -24,6 +24,54 @@ int main(int argc, char **argv){
 		if( !strcmp(argv[1], "-format")){
 			fs_format();
 		}
+
+		if( !strcmp(argv[1], "-create")){
+			if(argc < 4){
+				printf("%s -create <disk file> <simulated file>\n", argv[0]);
+			} else {
+				fs_create(argv[2], argv[3]);
+			}
+		}
+
+		if( !strcmp(argv[1], "-read")){
+			if(argc < 4){
+				printf("%s -read <disk file> <simulated file>\n", argv[0]);
+			} else {
+				fs_read(argv[2], argv[3]);
+			}
+		}
+
+		if( !strcmp(argv[1], "-ls")){
+			if(argc < 3){
+				printf("%s -ls <absolute directory path>\n", argv[0]);
+			} else {
+				//
+			}
+		}
+
+		if( !strcmp(argv[1], "-del")){
+			if(argc < 3){
+				printf("%s -del <simulated file>\n", argv[0]);
+			} else {
+				//
+			}
+		}
+
+		if( !strcmp(argv[1], "-mkdir")){
+			if(argc < 3){
+				printf("%s -mkdir <absolute directory path>\n", argv[0]);
+			} else {
+				//
+			}
+		}
+
+		if( !strcmp(argv[1], "-rmdir")){
+			if(argc < 3){
+				printf("%s -rmdir <absolute directory path>\n", argv[0]);
+			} else {
+				//
+			}
+		}
 		
 	}
 	

@@ -66,42 +66,62 @@ int fs_create(char* input_file, char* simul_file){
 	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
 
 	/* set path */
+	char *s_name = basename(simul_file);
+	char *s_path = dirname(simul_file);
+	
 	const char delimiter[2] = "/";
-	char *e_name = strtok(simul_file, delimiter);
-	int hasDir = 0;
+	char *e_name = strtok(s_path, delimiter);
+	int exists = 0;
 
 	int i = 0;
 	int length;
+	int s_dir;
 	struct file_dir_entry* cur_entries;
+	struct table_directory t_dir;
 	cur_entries = root_dir.entries;
+
+	// Verify if path exists and navigate through
 	while( e_name != NULL ) 
 	{	
 		printf( "%s\n", e_name );
 
 		length = sizeof(cur_entries) / sizeof(cur_entries[0]);
 		printf( "length:%d\n", length );
-		hasDir = 0;
+		exists = 0;
 		
 		//verify if	dir/file exist on current entries
 		for(i; i < length; i++){
-			if(strcmp(cur_entries[i].name, e_name)){
-				hasDir = 1;
+			if(strcmp(cur_entries[i].name, e_name) && cur_entries[i].dir == 1){
+				exists = 1;
+
+				// go to next path segment
+				e_name = strtok(NULL, delimiter);
+
+				//read dir sector
+				s_dir = cur_entries[i].sector_start;
+				ds_read_sector(s_dir, (void*)&t_dir, SECTOR_SIZE);
+
+				//set next entries from dir
+				cur_entries = t_dir.entries;
+
+				break;
 			}
 		}
-		if(hasDir){
-			e_name = strtok(NULL, delimiter);
-		}else{
+
+		if(!exists){
 			printf("The path doesn't exist\n");
 			return 1;
 		}
 
 		i = 0;
-		hasDir = 0;
+		exists = 0;
 	}
 
-	//printf("file_name: %s\n",file_name);
-	//printf("dir_name: %s\n",dir_name);
-	return 1;
+	printf("The path exist\n");
+
+	//write t_dir at cur_sector
+
+	
 
 	/* open file */
 	FILE *fileptr;

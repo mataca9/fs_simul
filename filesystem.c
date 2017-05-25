@@ -9,6 +9,62 @@
 #define MAX_ROOT_ENTRIES 15
 #define MAX_DIR_ENTRIES 16
 
+
+/**
+ * @brief Verify if dir exist and return its sector
+ * @param t_dir table_directory pointer.
+ * @param s_path dir path.
+ * @param cur_entries root entries (then used for current entries).
+ * @return dir sector number or -1 if not found.
+ */
+int find_dir(struct table_directory *t_dir, char *s_path, struct file_dir_entry *cur_entries){
+	int exists = 0;
+	int i = 0;
+	int s_dir;
+	printf("- Searching path: %s \n", s_path);
+	const char delimiter[2] = "/";
+	char *e_name = strtok(s_path, delimiter);
+	int t =  0;
+
+	// Verify if path exists and navigate through
+	while( e_name != NULL ) 
+	{	
+		printf("- Searching dir: %s \n", e_name);
+		exists = 0;
+		
+		//verify if	dir exist on current entries
+		for(i; i < MAX_DIR_ENTRIES; i++){
+			if(strcmp(cur_entries[i].name, e_name) == 0 && cur_entries[i].dir == 1){
+				exists = 1;
+
+				// go to next path segment
+				//e_name = strtok(NULL, delimiter);
+
+				//read dir sector
+				s_dir = cur_entries[i].sector_start;
+				ds_read_sector(s_dir, (void*)&t_dir, SECTOR_SIZE);
+
+				//set next entries from dir
+				cur_entries = t_dir->entries;
+
+				break;
+			}
+		}
+
+		e_name = strtok(NULL, delimiter);
+
+		if(!exists){
+			printf("Error: The path doesn't exist\n");
+			return -1;
+		}
+
+		i = 0;
+		exists = 0;
+	}
+
+	return s_dir;
+}
+
 /**
  * @brief Format disk.
  * 
@@ -61,7 +117,7 @@ int fs_create(char* input_file, char* simul_file){
 	}
 
 	/* Write the code to load a new file to the simulated filesystem. */
-	printf("Creating '%s' at '%s'\n", input_file, simul_file);
+	printf("- Creating '%s' at '%s'\n", input_file, simul_file);
 	
 	/* initiate base */
 	struct sector_data sector;
@@ -69,19 +125,19 @@ int fs_create(char* input_file, char* simul_file){
 	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
 
 	/* set path */
-	char *s_name = basename(simul_file);
-	char *s_path = dirname(simul_file);
+	char *s_name = strdup(basename(simul_file));
+	char *s_path = strdup(dirname(simul_file));
+	char *str = strdup(dirname(simul_file));	
 	
 	const char delimiter[2] = "/";
-	char *e_name = strtok(s_path, delimiter);
-	int exists = 0;
+	char *e_name = strtok(str, delimiter);
 
 	int i = 0;
 	int isRoot = 1;
 	int length;
-	int s_dir;
 	struct file_dir_entry* cur_entries;
 	struct file_dir_entry cur_entry;
+	int s_dir;
 	struct table_directory t_dir;
 	cur_entries = root_dir.entries;
 
@@ -90,68 +146,39 @@ int fs_create(char* input_file, char* simul_file){
 	char *buffer;
 	long filelen;
 
+	/* amount data for current sector */ 
+	int data_amount = 0;
+	/* sector number for data */
+	int sector_number;
+
 	/* file info */
 	fileptr = fopen(input_file, "rb");
 	fseek(fileptr, 0, SEEK_END);
 	filelen = ftell(fileptr);
 	rewind(fileptr);
 
-	// Verify if path exists and navigate through
-	while( e_name != NULL ) 
-	{	
-		// is not root folder anymore
+	// is not root, search dir
+	if( e_name != NULL ) {
 		isRoot = 0;
-		printf( "%s\n", e_name );
-
-		length = sizeof(cur_entries) / sizeof(cur_entries[0]);
-		printf( "length:%d\n", length );
-		exists = 0;
-		
-		//verify if	dir/file exist on current entries
-		for(i; i < length; i++){
-			if(strcmp(cur_entries[i].name, e_name) && cur_entries[i].dir == 1){
-				exists = 1;
-
-				// go to next path segment
-				e_name = strtok(NULL, delimiter);
-
-				//read dir sector
-				s_dir = cur_entries[i].sector_start;
-				ds_read_sector(s_dir, (void*)&t_dir, SECTOR_SIZE);
-
-				//set next entries from dir
-				cur_entries = t_dir.entries;
-
-				break;
-			}
-		}
-
-		if(!exists){
-			printf("Error: The path doesn't exist\n");
+		if((s_dir = find_dir(&t_dir, s_path, cur_entries)) < 1){
 			return 1;
 		}
 
-		i = 0;
-		exists = 0;
-	}
-
-	printf("The path exist\n");
-
-	// define if current structure is root or dir
-	if(isRoot){
-		printf("root \n");
-		length = MAX_ROOT_ENTRIES;
-		cur_entries = root_dir.entries;
-	}else{
-		printf("dir \n");
 		length = MAX_DIR_ENTRIES;
 		cur_entries = t_dir.entries;
+	}else{
+		length = MAX_ROOT_ENTRIES;
+		cur_entries = root_dir.entries;
 	}
 
 	// Verify which is the next free entry position
 	for(i=0; i < length; i++){
+		if(strcmp(cur_entries[i].name, s_name) == 0 && cur_entries[i].dir == 0){
+			printf("Error: Already exist a file with the same name\n");
+			return 1;
+		}
+
 		if(cur_entries[i].sector_start == 0){
-			cur_entry = cur_entries[i];
 			break;
 		}
 
@@ -163,22 +190,25 @@ int fs_create(char* input_file, char* simul_file){
 	}
 
 	// set entry file
-	cur_entry.dir = 0;
-	strcpy(cur_entry.name, s_name);
-	cur_entry.sector_start = root_dir.free_sectors_list++;
-	cur_entry.size_bytes = filelen;	
+	cur_entries[i].dir = 0;
+	strcpy(cur_entries[i].name, s_name);
+	cur_entries[i].sector_start = root_dir.free_sectors_list;
+	cur_entries[i].size_bytes = filelen;	
 
-	// printf("length:%d \n", length);
-	// if(length < MAX_DIR_ENTRIES){
-	// } else {
-	// }
+	if(isRoot){
+		root_dir.entries[i] = cur_entries[i];
+	}else{
+		t_dir.entries[i] = cur_entries[i];
+		ds_write_sector(s_dir, (void*)&t_dir, SECTOR_SIZE);
+	}
 
 	/* set sector to the first free */
 	memset(&sector, root_dir.free_sectors_list, sizeof(sector));
-	int sector_number = root_dir.free_sectors_list;
+	sector_number = root_dir.free_sectors_list;
 
-	/* write file at sectors */ 
-	int data_amount = 0;
+	printf("File data starts at: %d\n", cur_entries[i].sector_start);
+
+	
 	while(1){
 
 		// have read all file
@@ -199,14 +229,20 @@ int fs_create(char* input_file, char* simul_file){
 			data_amount = filelen - ftell(fileptr);
 			sector.next_sector = 0;
 			root_dir.free_sectors_list = sector_number + 1;
+			ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
 		}
 		
 		// move the file pointer for the data_amount available at this iteration
 		fseek(fileptr, data_amount, SEEK_CUR);
-		printf("data_amount: %d\n", data_amount);
-		printf("offset: %d\n", ftell(fileptr));
+		printf("%d: data_amount: %d\n", sector_number, data_amount);
+		//printf("offset: %d\n", ftell(fileptr));
 		ds_write_sector(sector_number++, (void*)&sector, SECTOR_SIZE);					
 	}
+
+	// save root_dir current context
+	ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
+
+	printf("free sector: %d\n", root_dir.free_sectors_list);
 
 	fclose(fileptr);	
 	ds_stop();

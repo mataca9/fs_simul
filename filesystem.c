@@ -6,6 +6,9 @@
 #include "libdisksimul.h"
 #include "filesystem.h"
 
+#define MAX_ROOT_ENTRIES 15
+#define MAX_DIR_ENTRIES 16
+
 /**
  * @brief Format disk.
  * 
@@ -74,15 +77,30 @@ int fs_create(char* input_file, char* simul_file){
 	int exists = 0;
 
 	int i = 0;
+	int isRoot = 1;
 	int length;
 	int s_dir;
 	struct file_dir_entry* cur_entries;
+	struct file_dir_entry cur_entry;
 	struct table_directory t_dir;
 	cur_entries = root_dir.entries;
+
+	/* open file */
+	FILE *fileptr;
+	char *buffer;
+	long filelen;
+
+	/* file info */
+	fileptr = fopen(input_file, "rb");
+	fseek(fileptr, 0, SEEK_END);
+	filelen = ftell(fileptr);
+	rewind(fileptr);
 
 	// Verify if path exists and navigate through
 	while( e_name != NULL ) 
 	{	
+		// is not root folder anymore
+		isRoot = 0;
 		printf( "%s\n", e_name );
 
 		length = sizeof(cur_entries) / sizeof(cur_entries[0]);
@@ -109,7 +127,7 @@ int fs_create(char* input_file, char* simul_file){
 		}
 
 		if(!exists){
-			printf("The path doesn't exist\n");
+			printf("Error: The path doesn't exist\n");
 			return 1;
 		}
 
@@ -119,20 +137,41 @@ int fs_create(char* input_file, char* simul_file){
 
 	printf("The path exist\n");
 
-	//write t_dir at cur_sector
+	// define if current structure is root or dir
+	if(isRoot){
+		printf("root \n");
+		length = MAX_ROOT_ENTRIES;
+		cur_entries = root_dir.entries;
+	}else{
+		printf("dir \n");
+		length = MAX_DIR_ENTRIES;
+		cur_entries = t_dir.entries;
+	}
 
-	
+	// Verify which is the next free entry position
+	for(i=0; i < length; i++){
+		if(cur_entries[i].sector_start == 0){
+			cur_entry = cur_entries[i];
+			break;
+		}
 
-	/* open file */
-	FILE *fileptr;
-	char *buffer;
-	long filelen;
+		// if didnt break, all slots are in use
+		if(i == length - 1){
+			printf("Error: Cant write anymore at this dir\n");
+			return 1;
+		}
+	}
 
-	/* file info */
-	fileptr = fopen(input_file, "rb");
-	fseek(fileptr, 0, SEEK_END);
-	filelen = ftell(fileptr);
-	rewind(fileptr);
+	// set entry file
+	cur_entry.dir = 0;
+	strcpy(cur_entry.name, s_name);
+	cur_entry.sector_start = root_dir.free_sectors_list++;
+	cur_entry.size_bytes = filelen;	
+
+	// printf("length:%d \n", length);
+	// if(length < MAX_DIR_ENTRIES){
+	// } else {
+	// }
 
 	/* set sector to the first free */
 	memset(&sector, root_dir.free_sectors_list, sizeof(sector));

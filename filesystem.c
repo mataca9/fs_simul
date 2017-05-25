@@ -8,6 +8,7 @@
 
 #define MAX_ROOT_ENTRIES 15
 #define MAX_DIR_ENTRIES 16
+#define SECTOR_DATA_SIZE 508
 
 
 /**
@@ -19,12 +20,11 @@
  */
 int find_dir(struct table_directory *t_dir, char *s_path, struct file_dir_entry *cur_entries){
 	int exists = 0;
-	int i = 0;
+	int i;
 	int s_dir;
 	printf("- Searching path: %s \n", s_path);
 	const char delimiter[2] = "/";
 	char *e_name = strtok(s_path, delimiter);
-	int t =  0;
 
 	// Verify if path exists and navigate through
 	while( e_name != NULL ) 
@@ -33,7 +33,7 @@ int find_dir(struct table_directory *t_dir, char *s_path, struct file_dir_entry 
 		exists = 0;
 		
 		//verify if	dir exist on current entries
-		for(i; i < MAX_DIR_ENTRIES; i++){
+		for(i = 0; i < MAX_DIR_ENTRIES; i++){
 			if(strcmp(cur_entries[i].name, e_name) == 0 && cur_entries[i].dir == 1){
 				exists = 1;
 
@@ -136,14 +136,12 @@ int fs_create(char* input_file, char* simul_file){
 	int isRoot = 1;
 	int length;
 	struct file_dir_entry* cur_entries;
-	struct file_dir_entry cur_entry;
 	int s_dir;
 	struct table_directory t_dir;
 	cur_entries = root_dir.entries;
 
 	/* open file */
 	FILE *fileptr;
-	char *buffer;
 	long filelen;
 
 	/* amount data for current sector */ 
@@ -205,9 +203,6 @@ int fs_create(char* input_file, char* simul_file){
 	/* set sector to the first free */
 	memset(&sector, root_dir.free_sectors_list, sizeof(sector));
 	sector_number = root_dir.free_sectors_list;
-
-	printf("File data starts at: %d\n", cur_entries[i].sector_start);
-
 	
 	while(1){
 
@@ -216,12 +211,13 @@ int fs_create(char* input_file, char* simul_file){
 			break;
 		}
 
-		// set data to sector
-		sprintf(sector.data, "%d", fileptr);
+		// clear sector data
+		memset(sector.data, 0, sizeof(sector.data));
+		sprintf(sector.data, "%d", SECTOR_DATA_SIZE);
 
 		// have more than 508 bytes to read
-		if(ftell(fileptr) + 508 < filelen){
-			data_amount = 508;
+		if(ftell(fileptr) + SECTOR_DATA_SIZE < filelen){
+			data_amount = SECTOR_DATA_SIZE;
 			sector.next_sector = sector_number + 1;
 		}
 		// have less than 508 bytes to read
@@ -231,11 +227,12 @@ int fs_create(char* input_file, char* simul_file){
 			root_dir.free_sectors_list = sector_number + 1;
 			ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
 		}
+
+		// write data to sector
+		fread(sector.data, data_amount, 1, fileptr);
 		
 		// move the file pointer for the data_amount available at this iteration
 		fseek(fileptr, data_amount, SEEK_CUR);
-		printf("%d: data_amount: %d\n", sector_number, data_amount);
-		//printf("offset: %d\n", ftell(fileptr));
 		ds_write_sector(sector_number++, (void*)&sector, SECTOR_SIZE);					
 	}
 
@@ -262,7 +259,79 @@ int fs_read(char* output_file, char* simul_file){
 		return ret;
 	}
 	
-	/* Write the code to read a file from the simulated filesystem. */
+	printf("- Copying '%s' to '%s'\n", simul_file, output_file);
+	
+	/* initiate base */
+	struct sector_data sector;
+	struct root_table_directory root_dir;
+	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
+
+	/* set path */
+	char *s_name = strdup(basename(simul_file));
+	char *s_path = strdup(dirname(simul_file));
+	char *str = strdup(dirname(simul_file));	
+	
+	const char delimiter[2] = "/";
+	char *e_name = strtok(str, delimiter);
+
+	int i = 0;
+	int length;
+	struct file_dir_entry* cur_entries;
+	int s_dir;
+	struct table_directory t_dir;
+	cur_entries = root_dir.entries;
+	int data_amount = 0;
+	int left_data;
+
+
+	FILE *fileptr;
+
+	fileptr = fopen(output_file, "w");
+
+	// is not root, search dir
+	if( e_name != NULL ) {
+		if((s_dir = find_dir(&t_dir, s_path, cur_entries)) < 1){
+			return 1;
+		}
+
+		length = MAX_DIR_ENTRIES;
+		cur_entries = t_dir.entries;
+	}else{
+		length = MAX_ROOT_ENTRIES;
+		cur_entries = root_dir.entries;
+	}
+
+	// Verify which is the next free entry position
+	for(i=0; i < length; i++){
+		if(strcmp(cur_entries[i].name, s_name) == 0 && cur_entries[i].dir == 0){
+			break;
+		}
+
+		// if didnt break, all slots are in use
+		if(i == length - 1){
+			printf("File does not exist\n");
+			return 1;
+		}
+	}
+
+	left_data = cur_entries[i].size_bytes;
+	ds_read_sector(cur_entries[i].sector_start, (void*)&sector, SECTOR_SIZE);
+
+	while(left_data > 0){
+		if(left_data > SECTOR_DATA_SIZE){
+			data_amount = SECTOR_DATA_SIZE;
+			left_data -= SECTOR_DATA_SIZE;
+		} else {
+			data_amount = left_data;
+			left_data = 0;
+		}
+		
+		fwrite(sector.data, sizeof(char), data_amount, fileptr);
+
+		ds_read_sector(sector.next_sector, (void*)&sector, SECTOR_SIZE);
+	}
+
+	fclose(fileptr);
 	
 	ds_stop();
 	

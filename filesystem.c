@@ -61,18 +61,46 @@ int fs_create(char* input_file, char* simul_file){
 	printf("Creating '%s' at '%s'\n", input_file, simul_file);
 	
 	/* initiate base */
-	int i = 0;
 	struct sector_data sector;
 	struct root_table_directory root_dir;
 	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
 
 	/* set path */
-	char *file_name = basename(simul_file);
-	char *dir_name = dirname(simul_file);
+	const char delimiter[2] = "/";
+	char *e_name = strtok(simul_file, delimiter);
+	int hasDir = 0;
 
-	printf("file_name: %s\n",file_name);
-	printf("dir_name: %s\n",dir_name);
-	printf("The path doesn't exist\n");
+	int i = 0;
+	int length;
+	struct file_dir_entry* cur_entries;
+	cur_entries = root_dir.entries;
+	while( e_name != NULL ) 
+	{	
+		printf( "%s\n", e_name );
+
+		length = sizeof(cur_entries) / sizeof(cur_entries[0]);
+		printf( "length:%d\n", length );
+		hasDir = 0;
+		
+		//verify if	dir/file exist on current entries
+		for(i; i < length; i++){
+			if(strcmp(cur_entries[i].name, e_name)){
+				hasDir = 0;
+			}
+		}
+		if(hasDir){
+			e_name = strtok(NULL, delimiter);
+		}else{
+			printf("The path doesn't exist\n");
+			return 1;
+		}
+
+		i = 0;
+		hasDir = 0;
+	}
+
+	//printf("file_name: %s\n",file_name);
+	//printf("dir_name: %s\n",dir_name);
 	return 1;
 
 	/* open file */
@@ -99,6 +127,7 @@ int fs_create(char* input_file, char* simul_file){
 			break;
 		}
 
+		// set data to sector
 		sprintf(sector.data, "%d", fileptr);
 
 		// have more than 508 bytes to read
@@ -120,18 +149,7 @@ int fs_create(char* input_file, char* simul_file){
 		ds_write_sector(sector_number++, (void*)&sector, SECTOR_SIZE);					
 	}
 
-	fclose(fileptr);
-
-	// int i=0;
-	// for(i; i < 15; i++){
-	// 	printf("entry_length = %s\n", root_dir.entries[i].name);
-	// }
-
-	//int entry_length = sizeof(root_dir.entries) / sizeof(root_dir.entries[0]);
-	
-
-
-	
+	fclose(fileptr);	
 	ds_stop();
 	
 	return 0;

@@ -85,7 +85,7 @@ int fs_create(char* input_file, char* simul_file){
 		//verify if	dir/file exist on current entries
 		for(i; i < length; i++){
 			if(strcmp(cur_entries[i].name, e_name)){
-				hasDir = 0;
+				hasDir = 1;
 			}
 		}
 		if(hasDir){

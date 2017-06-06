@@ -204,7 +204,7 @@ int fs_create(char* input_file, char* simul_file){
 	memset(&sector, root_dir.free_sectors_list, sizeof(sector));
 	sector_number = root_dir.free_sectors_list;
 	
-	while(1){
+	do{
 
 		// have read all file
 		if( ftell(fileptr) == filelen ){
@@ -215,26 +215,26 @@ int fs_create(char* input_file, char* simul_file){
 		memset(sector.data, 0, sizeof(sector.data));
 		sprintf(sector.data, "%d", SECTOR_DATA_SIZE);
 
-		// have more than 508 bytes to read
-		if(ftell(fileptr) + SECTOR_DATA_SIZE < filelen){
-			data_amount = SECTOR_DATA_SIZE;
+		// have more than 508 bytes to read	
+
+		// write data to sector
+		data_amount = fread(sector.data, 1, SECTOR_DATA_SIZE, fileptr);
+
+		if(data_amount < SECTOR_DATA_SIZE){
 			sector.next_sector = sector_number + 1;
 		}
-		// have less than 508 bytes to read
 		else{
-			data_amount = filelen - ftell(fileptr);
 			sector.next_sector = 0;
 			root_dir.free_sectors_list = sector_number + 1;
 			ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
 		}
 
-		// write data to sector
-		fread(sector.data, data_amount, 1, fileptr);
+		printf("sector:%d\n", sector.next_sector);
 		
 		// move the file pointer for the data_amount available at this iteration
-		fseek(fileptr, data_amount, SEEK_CUR);
-		ds_write_sector(sector_number++, (void*)&sector, SECTOR_SIZE);					
-	}
+		ds_write_sector(sector_number, (void*)&sector, SECTOR_SIZE);
+		sector_number++;
+	} while(data_amount == SECTOR_DATA_SIZE);
 
 	// save root_dir current context
 	ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
@@ -484,4 +484,5 @@ int fs_free_map(char *log_f){
 	
 	return 0;
 }
+
 

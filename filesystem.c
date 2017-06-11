@@ -220,16 +220,13 @@ int fs_create(char* input_file, char* simul_file){
 		// write data to sector
 		data_amount = fread(sector.data, 1, SECTOR_DATA_SIZE, fileptr);
 
-		if(data_amount < SECTOR_DATA_SIZE){
+		if(data_amount == SECTOR_DATA_SIZE){
 			sector.next_sector = sector_number + 1;
-		}
-		else{
+		} else{
 			sector.next_sector = 0;
 			root_dir.free_sectors_list = sector_number + 1;
 			ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
 		}
-
-		printf("sector:%d\n", sector.next_sector);
 		
 		// move the file pointer for the data_amount available at this iteration
 		ds_write_sector(sector_number, (void*)&sector, SECTOR_SIZE);

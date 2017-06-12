@@ -45,7 +45,7 @@ int main(int argc, char **argv){
 			if(argc < 3){
 				printf("%s -ls <absolute directory path>\n", argv[0]);
 			} else {
-				//
+				fs_ls(argv[2]);
 			}
 		}
 

@@ -256,7 +256,7 @@ int fs_read(char* output_file, char* simul_file){
 		return ret;
 	}
 	
-	printf("- Copying '%s' to '%s'\n", simul_file, output_file);
+	printf("- Copying: '%s' to '%s'\n", simul_file, output_file);
 	
 	/* initiate base */
 	struct sector_data sector;
@@ -364,7 +364,65 @@ int fs_ls(char *dir_path){
 		return ret;
 	}
 	
-	/* Write the code to show files or directories. */
+	/* initiate base */
+	struct root_table_directory root_dir;
+	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
+
+	/* set path */
+	char *s_path = strdup(dirname(dir_path));
+	char *str = strdup(dirname(dir_path));	
+	
+	const char delimiter[2] = "/";
+	char *e_name = strtok(str, delimiter);
+
+	int i = 0;
+	int length;
+	struct file_dir_entry* cur_entries;
+	int s_dir;
+	struct table_directory t_dir;
+	cur_entries = root_dir.entries;
+	int count = 0;
+
+		// is not root, search dir
+	if( e_name != NULL ) {
+		if((s_dir = find_dir(&t_dir, s_path, cur_entries)) < 1){
+			return 1;
+		}
+		length = MAX_DIR_ENTRIES;
+		cur_entries = t_dir.entries;
+	}else{
+		length = MAX_ROOT_ENTRIES;
+		cur_entries = root_dir.entries;
+	}
+
+	printf("- Listing entries at: '%s'\n", dir_path);
+	for(i=0; i < length; i++){
+		// Verify if is file or dir
+		if(cur_entries[i].dir == 0){
+			// dir = 0 and size_byte = 0, means unused entry
+			if(cur_entries[i].size_bytes == 0){
+				break;
+			}
+			printf("f ");
+		}else {
+			printf("d ");
+		}
+
+		printf("%s", cur_entries[i].name);
+		if(cur_entries[i].size_bytes > 0){
+			printf("\t%d bytes", cur_entries[i].size_bytes);
+		}
+		printf("\n");
+		count++;
+	}
+
+	if(count == 0){
+		printf("This dir is empty\n");
+	}else if(count == 1){
+		printf("%d entry found at \n", count);
+	} else{
+		printf("%d entries found at \n", count);
+	}
 	
 	ds_stop();
 	

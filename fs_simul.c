@@ -53,7 +53,7 @@ int main(int argc, char **argv){
 			if(argc < 3){
 				printf("%s -del <simulated file>\n", argv[0]);
 			} else {
-				//
+				fs_del(argv[2]);
 			}
 		}
 

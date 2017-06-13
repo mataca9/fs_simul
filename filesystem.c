@@ -346,7 +346,80 @@ int fs_del(char* simul_file){
 		return ret;
 	}
 	
-	/* Write the code delete a file from the simulated filesystem. */
+	printf("- Deleting: '%s' \n", simul_file);
+	
+	/* initiate base */
+	struct sector_data sector;
+	struct root_table_directory root_dir;
+	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
+
+	/* set path */
+	char *s_name = strdup(basename(simul_file));
+	char *s_path = strdup(dirname(simul_file));
+	char *str = strdup(dirname(simul_file));	
+	
+	const char delimiter[2] = "/";
+	char *e_name = strtok(str, delimiter);
+
+	int i = 0;
+	int length;
+	struct file_dir_entry* cur_entries;
+	int s_dir;
+	struct table_directory t_dir;
+	cur_entries = root_dir.entries;
+	int isRoot = 1;
+	int sector_number;
+
+	// is not root, search dir
+	if( e_name != NULL ) {
+		isRoot = 0;
+		if((s_dir = find_dir(&t_dir, s_path, cur_entries)) < 1){
+			return 1;
+		}
+
+		length = MAX_DIR_ENTRIES;
+		cur_entries = t_dir.entries;
+	}else{
+		length = MAX_ROOT_ENTRIES;
+		cur_entries = root_dir.entries;
+	}
+
+	// Verify which is the next free entry position
+	for(i=0; i < length; i++){
+		if(strcmp(cur_entries[i].name, s_name) == 0 && cur_entries[i].dir == 0){
+			break;
+		}
+
+		// if didnt break, all slots are in use
+		if(i == length - 1){
+			printf("File does not exist\n");
+			return 1;
+		}
+	}
+
+	ds_read_sector(cur_entries[i].sector_start, (void*)&sector, SECTOR_SIZE);
+	while(sector.next_sector != 0){
+		printf("sector number: %d\n", sector.next_sector);
+		sector_number = sector.next_sector;
+		ds_read_sector(sector.next_sector, (void*)&sector, SECTOR_SIZE);
+	}
+
+	// sectors added to the beggining of free_sectors_list
+	sector.next_sector = root_dir.free_sectors_list;
+	root_dir.free_sectors_list = cur_entries[i].sector_start;
+	
+	// cleaned entry
+	cur_entries[i].dir = 0;
+	memset(cur_entries[i].name, 0, strlen(cur_entries[i].name));
+	cur_entries[i].size_bytes = 0;
+	cur_entries[i].sector_start = 0;	
+
+	if(isRoot == 0){
+		ds_write_sector(s_dir, (void*)&t_dir, SECTOR_SIZE);
+	}
+	ds_write_sector(sector_number, (void*)&sector, SECTOR_SIZE);
+	ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
+	printf("Deleted successfully\n");
 	
 	ds_stop();
 	
@@ -370,7 +443,7 @@ int fs_ls(char *dir_path){
 
 	/* set path */
 	char *s_path = strdup(dirname(dir_path));
-	char *str = strdup(dirname(dir_path));	
+	char *str = dir_path;	
 	
 	const char delimiter[2] = "/";
 	char *e_name = strtok(str, delimiter);

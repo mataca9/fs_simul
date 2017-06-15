@@ -30,35 +30,15 @@ int find_dir(struct table_directory *t_dir, char *s_path, struct file_dir_entry 
 	while( e_name != NULL ) 
 	{	
 		printf("- Searching dir: %s \n", e_name);
-		
+		exists = 0;
+
 		//verify if	dir exist on current entries
 		for(i = 0; i < MAX_DIR_ENTRIES; i++){
-			printf("name: %s\n", cur_entries[i].name);
-			printf("sector: %d\n", cur_entries[i].sector_start);
 			if(strcmp(cur_entries[i].name, e_name) == 0 && cur_entries[i].dir == 1){
 				exists = 1;
-				printf("Encontrou no diretorio\n");
-
-				// go to next path segment
-				//e_name = strtok(NULL, delimiter);
-
-				//read dir sector
-				ds_read_sector(cur_entries[i].sector_start, (void*)&t_dir, SECTOR_SIZE);
-
-				if(t_dir->entries != NULL){
-					memcpy(cur_entries, t_dir->entries, MAX_DIR_ENTRIES*sizeof(cur_entries[0]));
-				}
-				
-				
-				/*
-
-				printf("serto %d?\n", s_dir);
-				*/
-
-				//set next entries from dir
-				//memset(cur_entries, 0, sizeof(cur_entries));
-				//memcpy(cur_entries, t_dir->entries, sizeof(cur_entries));
-
+				s_dir = cur_entries[i].sector_start;
+				ds_read_sector(cur_entries[i].sector_start, (void*)t_dir, SECTOR_SIZE);
+				cur_entries = t_dir->entries;
 				break;
 			}
 		}
@@ -69,7 +49,6 @@ int find_dir(struct table_directory *t_dir, char *s_path, struct file_dir_entry 
 			printf("Error: The path doesn't exist\n");
 			return -1;
 		}
-
 	}
 
 	return s_dir;
@@ -412,7 +391,6 @@ int fs_del(char* simul_file){
 
 	ds_read_sector(cur_entries[i].sector_start, (void*)&sector, SECTOR_SIZE);
 	while(sector.next_sector != 0){
-		printf("sector number: %d\n", sector.next_sector);
 		sector_number = sector.next_sector;
 		ds_read_sector(sector.next_sector, (void*)&sector, SECTOR_SIZE);
 	}
@@ -455,7 +433,7 @@ int fs_ls(char *dir_path){
 	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
 
 	/* set path */
-	char *s_path = dirname(dir_path);
+	char *s_path = dir_path;
 	char *str = malloc(sizeof(s_path));
 	strcpy(str, s_path);
 	
@@ -506,9 +484,9 @@ int fs_ls(char *dir_path){
 	if(count == 0){
 		printf("This directory is empty\n");
 	}else if(count == 1){
-		printf("%d entry found at \n", count);
+		printf("%d entry found\n", count);
 	} else{
-		printf("%d entries found at \n", count);
+		printf("%d entries found\n", count);
 	}
 	
 	ds_stop();
@@ -558,7 +536,7 @@ int fs_mkdir(char* directory_path){
 		isRoot = 0;
 		if((s_dir = find_dir(&t_dir, s_path, cur_entries)) < 1){
 			return 1;
-		}
+		}		
 
 		length = MAX_DIR_ENTRIES;
 		cur_entries = t_dir.entries;
@@ -584,8 +562,6 @@ int fs_mkdir(char* directory_path){
 		}
 	}
 
-	printf("directory: %s\n", s_name);
-
 	sector_number = root_dir.free_sectors_list;
 	root_dir.free_sectors_list++;
 
@@ -595,8 +571,6 @@ int fs_mkdir(char* directory_path){
 	cur_entries[i].sector_start = sector_number;
 	cur_entries[i].size_bytes = 0;
 
-
-	printf("starts at: %d\n", cur_entries[i].sector_start);
 	// write dir
 	memset(&table_dir, 0, sizeof(table_dir));	
 	ds_write_sector(sector_number, (void*)&table_dir, SECTOR_SIZE);
@@ -604,11 +578,12 @@ int fs_mkdir(char* directory_path){
 	// dir owner
 	if(isRoot == 1){
 		root_dir.entries[i] = cur_entries[i];
-		ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
 	}else{
 		t_dir.entries[i] = cur_entries[i];
 		ds_write_sector(s_dir, (void*)&t_dir, SECTOR_SIZE);
 	}
+	
+	ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
 
 	printf("Directory created successfully\n");
 	
@@ -622,13 +597,79 @@ int fs_mkdir(char* directory_path){
  * @param directory_path directory path.
  * @return 0 on success.
  */
-int fs_rmdir(char *directory_path){
+int fs_rmdir(char *dir_path){
 	int ret;
 	if ( (ret = ds_init(FILENAME, SECTOR_SIZE, NUMBER_OF_SECTORS, 0)) != 0 ){
 		return ret;
 	}
 	
-	/* Write the code to delete a directory. */
+	/* initiate base */
+	struct root_table_directory root_dir;
+	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
+
+	/* set path */
+	char *s_name = basename(dir_path);
+	char *s_path = dirname(dir_path);
+	char *str = malloc(sizeof(s_path));
+	strcpy(str, s_path);
+	
+	const char delimiter[2] = "/";
+	char *e_name = strtok(str, delimiter);
+
+	int i, j = 0;
+	struct file_dir_entry* cur_entries;
+	int s_dir;
+	struct table_directory t_dir;
+	struct table_directory delete_dir;
+	cur_entries = root_dir.entries;
+	int sector_number;
+	int is_empty = 1;
+
+	// is not root, search dir
+	if( e_name != NULL ) {
+		if((s_dir = find_dir(&t_dir, s_path, cur_entries)) < 1){
+			return 1;
+		}
+		cur_entries = t_dir.entries;
+	}else{
+		printf("ERROR: You cannot remove root dir.\n");
+		return 1;
+	}
+
+	for(i=0; i < MAX_DIR_ENTRIES; i++){
+		// Verify if is file or dir
+		if(strcmp(cur_entries[i].name, s_name)== 0){
+			sector_number = cur_entries[i].sector_start;
+			break;
+		}
+
+		if(i == MAX_DIR_ENTRIES-1){
+			printf("Error: The path doesn't exist\n");
+			return 1;
+		}
+	}
+
+	ds_read_sector(sector_number, (void*)&delete_dir, SECTOR_SIZE);
+
+	for(j=0; j < MAX_DIR_ENTRIES; j++){
+		if(delete_dir.entries[j].sector_start != 0){
+			is_empty = 0;
+		}
+	}
+
+	if(is_empty == 1){
+		// remove reference from parent dir
+		
+		t_dir.entries[i].dir = 0;
+		memset(t_dir.entries[i].name, 0, strlen(t_dir.entries[i].name));
+		t_dir.entries[i].size_bytes = 0;
+		t_dir.entries[i].sector_start = 0;
+
+		ds_write_sector(s_dir, (void*)&t_dir, SECTOR_SIZE);
+		printf("Directory was successfully removed\n");
+	}else{
+		printf("Error: Directory is not empty\n");
+	}
 	
 	ds_stop();
 	

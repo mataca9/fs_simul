@@ -69,7 +69,7 @@ int main(int argc, char **argv){
 			if(argc < 3){
 				printf("%s -rmdir <absolute directory path>\n", argv[0]);
 			} else {
-				//
+				fs_rmdir(argv[2]);
 			}
 		}
 		

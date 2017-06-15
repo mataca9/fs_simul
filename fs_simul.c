@@ -61,7 +61,7 @@ int main(int argc, char **argv){
 			if(argc < 3){
 				printf("%s -mkdir <absolute directory path>\n", argv[0]);
 			} else {
-				//
+				fs_mkdir(argv[2]);
 			}
 		}
 

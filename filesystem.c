@@ -21,7 +21,7 @@
 int find_dir(struct table_directory *t_dir, char *s_path, struct file_dir_entry *cur_entries){
 	int exists = 0;
 	int i;
-	int s_dir;
+	int s_dir = 0;
 	printf("- Searching path: %s \n", s_path);
 	const char delimiter[2] = "/";
 	char *e_name = strtok(s_path, delimiter);
@@ -30,22 +30,34 @@ int find_dir(struct table_directory *t_dir, char *s_path, struct file_dir_entry 
 	while( e_name != NULL ) 
 	{	
 		printf("- Searching dir: %s \n", e_name);
-		exists = 0;
 		
 		//verify if	dir exist on current entries
 		for(i = 0; i < MAX_DIR_ENTRIES; i++){
+			printf("name: %s\n", cur_entries[i].name);
+			printf("sector: %d\n", cur_entries[i].sector_start);
 			if(strcmp(cur_entries[i].name, e_name) == 0 && cur_entries[i].dir == 1){
 				exists = 1;
+				printf("Encontrou no diretorio\n");
 
 				// go to next path segment
 				//e_name = strtok(NULL, delimiter);
 
 				//read dir sector
-				s_dir = cur_entries[i].sector_start;
-				ds_read_sector(s_dir, (void*)&t_dir, SECTOR_SIZE);
+				ds_read_sector(cur_entries[i].sector_start, (void*)&t_dir, SECTOR_SIZE);
+
+				if(t_dir->entries != NULL){
+					memcpy(cur_entries, t_dir->entries, MAX_DIR_ENTRIES*sizeof(cur_entries[0]));
+				}
+				
+				
+				/*
+
+				printf("serto %d?\n", s_dir);
+				*/
 
 				//set next entries from dir
-				cur_entries = t_dir->entries;
+				//memset(cur_entries, 0, sizeof(cur_entries));
+				//memcpy(cur_entries, t_dir->entries, sizeof(cur_entries));
 
 				break;
 			}
@@ -53,13 +65,11 @@ int find_dir(struct table_directory *t_dir, char *s_path, struct file_dir_entry 
 
 		e_name = strtok(NULL, delimiter);
 
-		if(!exists){
+		if(exists == 0){
 			printf("Error: The path doesn't exist\n");
 			return -1;
 		}
 
-		i = 0;
-		exists = 0;
 	}
 
 	return s_dir;
@@ -127,7 +137,8 @@ int fs_create(char* input_file, char* simul_file){
 	/* set path */
 	char *s_name = strdup(basename(simul_file));
 	char *s_path = strdup(dirname(simul_file));
-	char *str = strdup(dirname(simul_file));	
+	char *str = malloc(sizeof(s_path));
+	strcpy(str, s_path);
 	
 	const char delimiter[2] = "/";
 	char *e_name = strtok(str, delimiter);
@@ -213,7 +224,7 @@ int fs_create(char* input_file, char* simul_file){
 
 		// clear sector data
 		memset(sector.data, 0, sizeof(sector.data));
-		sprintf(sector.data, "%d", SECTOR_DATA_SIZE);
+		//sprintf(sector.data, "%d", SECTOR_DATA_SIZE);
 
 		// have more than 508 bytes to read	
 
@@ -266,7 +277,8 @@ int fs_read(char* output_file, char* simul_file){
 	/* set path */
 	char *s_name = strdup(basename(simul_file));
 	char *s_path = strdup(dirname(simul_file));
-	char *str = strdup(dirname(simul_file));	
+	char *str = malloc(sizeof(s_path));
+	strcpy(str, s_path);	
 	
 	const char delimiter[2] = "/";
 	char *e_name = strtok(str, delimiter);
@@ -356,7 +368,8 @@ int fs_del(char* simul_file){
 	/* set path */
 	char *s_name = strdup(basename(simul_file));
 	char *s_path = strdup(dirname(simul_file));
-	char *str = strdup(dirname(simul_file));	
+	char *str = malloc(sizeof(s_path));
+	strcpy(str, s_path);	
 	
 	const char delimiter[2] = "/";
 	char *e_name = strtok(str, delimiter);
@@ -442,8 +455,9 @@ int fs_ls(char *dir_path){
 	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
 
 	/* set path */
-	char *s_path = strdup(dirname(dir_path));
-	char *str = dir_path;	
+	char *s_path = dirname(dir_path);
+	char *str = malloc(sizeof(s_path));
+	strcpy(str, s_path);
 	
 	const char delimiter[2] = "/";
 	char *e_name = strtok(str, delimiter);
@@ -490,7 +504,7 @@ int fs_ls(char *dir_path){
 	}
 
 	if(count == 0){
-		printf("This dir is empty\n");
+		printf("This directory is empty\n");
 	}else if(count == 1){
 		printf("%d entry found at \n", count);
 	} else{
@@ -513,7 +527,90 @@ int fs_mkdir(char* directory_path){
 		return ret;
 	}
 	
-	/* Write the code to create a new directory. */
+	printf("- Creating directory: '%s' \n", directory_path);
+	
+	/* initiate base */
+	struct table_directory table_dir;
+	struct root_table_directory root_dir;
+	ds_read_sector(0, (void*)&root_dir, SECTOR_SIZE);
+
+	/* set path */
+	char *s_name = strdup(basename(directory_path));
+	char *s_path = strdup(dirname(directory_path));
+	char *str = malloc(sizeof(s_path));
+	strcpy(str, s_path);
+	
+	const char delimiter[2] = "/";
+	char *e_name = strtok(str, delimiter);
+
+	int i = 0;
+	int length;
+	struct file_dir_entry* cur_entries;
+	int s_dir;
+	struct table_directory t_dir;
+	cur_entries = root_dir.entries;
+	int isRoot = 1;
+	int sector_number;
+
+
+	// is not root, search dir
+	if( e_name != NULL ) {
+		isRoot = 0;
+		if((s_dir = find_dir(&t_dir, s_path, cur_entries)) < 1){
+			return 1;
+		}
+
+		length = MAX_DIR_ENTRIES;
+		cur_entries = t_dir.entries;
+	}else{
+		length = MAX_ROOT_ENTRIES;
+		cur_entries = root_dir.entries;
+	}
+
+	for(i=0; i < length; i++){
+		if(strcmp(cur_entries[i].name, s_name) == 0 && cur_entries[i].dir == 1){
+			printf("Directory already exists\n");
+			return 1;
+		}
+
+		if(cur_entries[i].sector_start == 0){
+			break;
+		}
+
+		// if didnt break, all slots are in use
+		if(i == length - 1){
+			printf("File does not exist\n");
+			return 1;
+		}
+	}
+
+	printf("directory: %s\n", s_name);
+
+	sector_number = root_dir.free_sectors_list;
+	root_dir.free_sectors_list++;
+
+	// set entry dir
+	cur_entries[i].dir = 1;
+	strcpy(cur_entries[i].name, s_name);
+	cur_entries[i].sector_start = sector_number;
+	cur_entries[i].size_bytes = 0;
+
+
+	printf("starts at: %d\n", cur_entries[i].sector_start);
+	// write dir
+	memset(&table_dir, 0, sizeof(table_dir));	
+	ds_write_sector(sector_number, (void*)&table_dir, SECTOR_SIZE);
+
+	// dir owner
+	if(isRoot == 1){
+		root_dir.entries[i] = cur_entries[i];
+		ds_write_sector(0, (void*)&root_dir, SECTOR_SIZE);
+	}else{
+		t_dir.entries[i] = cur_entries[i];
+		ds_write_sector(s_dir, (void*)&t_dir, SECTOR_SIZE);
+	}
+
+	printf("Directory created successfully\n");
 	
 	ds_stop();
 	
